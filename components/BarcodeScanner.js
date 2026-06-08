@@ -1,5 +1,6 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
 import { X, Camera } from 'lucide-react'
 
@@ -11,7 +12,9 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   const [devices, setDevices] = useState([])
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [error, setError] = useState(null)
+  const [mounted, setMounted] = useState(false)
 
+  useEffect(() => { setMounted(true) }, [])
   useEffect(() => { onDetectedRef.current = onDetected }, [onDetected])
   useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
@@ -29,10 +32,8 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   function startReader(deviceId) {
     try { readerRef.current?.reset() } catch {}
     setError(null)
-
     const reader = createReader()
     readerRef.current = reader
-
     reader.decodeFromVideoDevice(deviceId, videoRef.current, (result, err) => {
       if (result) {
         onDetectedRef.current(result.getText())
@@ -49,7 +50,6 @@ export default function BarcodeScanner({ onDetected, onClose }) {
 
   useEffect(() => {
     const reader = createReader()
-
     reader.listVideoInputDevices()
       .then(list => {
         if (!list || list.length === 0) {
@@ -57,8 +57,6 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           return
         }
         setDevices(list)
-
-        // Prioritas: label mengandung "back/rear/environment" → webcam fisik → last device
         const backCamera = list.find(d => /back|rear|environment/i.test(d.label))
         const physicalCamera = list.find(d =>
           /webcam|usb|integrated|built.in|facetime|hd camera/i.test(d.label) &&
@@ -77,7 +75,6 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           setError('Gagal akses kamera: ' + (err?.message || err))
         }
       })
-
     return () => { try { readerRef.current?.reset() } catch {} }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -92,8 +89,13 @@ export default function BarcodeScanner({ onDetected, onClose }) {
     onClose()
   }
 
-  return (
-    <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-[200] p-4">
+  if (!mounted) return null
+
+  return createPortal(
+    <div
+      style={{ zIndex: 9999 }}
+      className="fixed inset-0 bg-black/80 flex items-center justify-center p-4"
+    >
       <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div>
@@ -105,7 +107,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           </button>
         </div>
 
-        <div className="bg-black relative">
+        <div className="bg-black relative min-h-[200px]">
           <video ref={videoRef} className="w-full" />
           {error && (
             <div className="absolute inset-0 flex items-center justify-center p-4">
@@ -114,7 +116,6 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           )}
         </div>
 
-        {/* Dropdown pilih kamera — muncul kalau ada >1 device */}
         {devices.length > 1 && (
           <div className="px-5 pt-4 pb-1">
             <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
@@ -138,6 +139,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           <p className="text-xs text-gray-400 text-center">Pastikan cahaya cukup & barcode tegak lurus</p>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   )
 }
