@@ -2,16 +2,18 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
-import { X, Camera } from 'lucide-react'
+import { X, Camera, RefreshCw } from 'lucide-react'
 
 export default function BarcodeScanner({ onDetected, onClose }) {
   const videoRef = useRef(null)
   const readerRef = useRef(null)
+  const streamRef = useRef(null)
   const onDetectedRef = useRef(onDetected)
   const onCloseRef = useRef(onClose)
   const [devices, setDevices] = useState([])
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [error, setError] = useState(null)
+  const [retrying, setRetrying] = useState(false)
   const [mounted, setMounted] = useState(false)
 
   useEffect(() => { setMounted(true) }, [])
@@ -29,73 +31,124 @@ export default function BarcodeScanner({ onDetected, onClose }) {
     return new BrowserMultiFormatReader(hints)
   }
 
-  function startReader(deviceId) {
+  function stopStream() {
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
     try { readerRef.current?.reset() } catch {}
+  }
+
+  async function startCamera(deviceId) {
+    stopStream()
     setError(null)
-    const reader = createReader()
-    readerRef.current = reader
-    reader.decodeFromVideoDevice(deviceId, videoRef.current, (result, err) => {
-      if (result) {
-        onDetectedRef.current(result.getText())
-        reader.reset()
-        onCloseRef.current()
+
+    try {
+      // Grab stream manual dulu biar bisa handle NotReadableError
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: {
+          deviceId: deviceId ? { exact: deviceId } : undefined,
+          facingMode: deviceId ? undefined : { ideal: 'environment' },
+          width: { ideal: 1280 },
+          height: { ideal: 720 },
+        }
+      })
+      streamRef.current = stream
+
+      // Kasih stream ke video element
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream
+        await videoRef.current.play().catch(() => {})
       }
-      if (err && err?.name !== 'NotFoundException') {
-        console.error('Scan error:', err)
+
+      // Baru decode dari video element (bukan dari deviceId)
+      const reader = createReader()
+      readerRef.current = reader
+
+      reader.decodeFromStream(stream, videoRef.current, (result, err) => {
+        if (result) {
+          onDetectedRef.current(result.getText())
+          stopStream()
+          onCloseRef.current()
+        }
+        if (err && err?.name !== 'NotFoundException') {
+          console.error('Scan error:', err)
+        }
+      })
+    } catch (err) {
+      if (err?.name === 'NotReadableError') {
+        setError('Kamera sedang dipakai aplikasi lain (OBS, Zoom, tab lain). Tutup dulu lalu coba lagi.')
+      } else if (err?.name === 'NotAllowedError') {
+        setError('Izin kamera ditolak. Aktifkan kamera di pengaturan browser.')
+      } else if (err?.name === 'NotFoundError') {
+        setError('Tidak ada kamera ditemukan.')
+      } else if (err?.name === 'OverconstrainedError') {
+        // deviceId exact gagal, coba tanpa constraint
+        startCamera(null)
+      } else {
+        setError('Gagal akses kamera: ' + (err?.message || err))
       }
-    }).catch(err => {
-      setError('Gagal buka kamera: ' + (err?.message || err))
-    })
+    }
   }
 
   useEffect(() => {
-    const reader = createReader()
-    reader.listVideoInputDevices()
-      .then(list => {
-        if (!list || list.length === 0) {
+    navigator.mediaDevices.enumerateDevices()
+      .then(async allDevices => {
+        // enumerateDevices butuh permission dulu buat dapet label
+        // minta permission sekali dulu
+        try {
+          const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
+          tempStream.getTracks().forEach(t => t.stop())
+        } catch {}
+
+        const videoDevices = allDevices.filter(d => d.kind === 'videoinput')
+        // enumerateDevices lagi setelah permission granted buat dapet label
+        const labeled = await navigator.mediaDevices.enumerateDevices()
+        const cams = labeled.filter(d => d.kind === 'videoinput')
+
+        if (cams.length === 0) {
           setError('Tidak ada kamera ditemukan')
           return
         }
-        setDevices(list)
-        const backCamera = list.find(d => /back|rear|environment/i.test(d.label))
-        const physicalCamera = list.find(d =>
+        setDevices(cams)
+
+        const backCamera = cams.find(d => /back|rear|environment/i.test(d.label))
+        const physicalCamera = cams.find(d =>
           /webcam|usb|integrated|built.in|facetime|hd camera/i.test(d.label) &&
           !/virtual|obs|snap|droid|ivcam|epoccam/i.test(d.label)
         )
-        const chosen = backCamera || physicalCamera || list[0]
+        const chosen = backCamera || physicalCamera || cams[0]
         setSelectedDevice(chosen.deviceId)
-        startReader(chosen.deviceId)
+        startCamera(chosen.deviceId)
       })
       .catch(err => {
-        if (err?.name === 'NotAllowedError') {
-          setError('Izin kamera ditolak. Aktifkan kamera di pengaturan browser.')
-        } else if (err?.name === 'NotFoundError') {
-          setError('Tidak ada kamera ditemukan.')
-        } else {
-          setError('Gagal akses kamera: ' + (err?.message || err))
-        }
+        setError('Gagal akses kamera: ' + (err?.message || err))
       })
-    return () => { try { readerRef.current?.reset() } catch {} }
+
+    return () => { stopStream() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleChangeDevice(e) {
     const deviceId = e.target.value
     setSelectedDevice(deviceId)
-    startReader(deviceId)
+    startCamera(deviceId)
+  }
+
+  async function handleRetry() {
+    setRetrying(true)
+    await startCamera(selectedDevice)
+    setRetrying(false)
   }
 
   function handleClose() {
-    try { readerRef.current?.reset() } catch {}
+    stopStream()
     onClose()
   }
 
   if (!mounted) return null
 
   return createPortal(
-    <div
-      style={{ zIndex: 9999 }}
-      className="fixed inset-0 bg-black/80 flex items-center justify-center p-4"
-    >
+    <div style={{ zIndex: 9999 }} className="fixed inset-0 bg-black/80 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
         <div className="flex items-center justify-between px-5 py-4 border-b">
           <div>
@@ -107,11 +160,19 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           </button>
         </div>
 
-        <div className="bg-black relative min-h-[200px]">
-          <video ref={videoRef} className="w-full" />
+        <div className="bg-black relative min-h-[220px] flex items-center justify-center">
+          <video ref={videoRef} className="w-full" playsInline muted autoPlay />
           {error && (
-            <div className="absolute inset-0 flex items-center justify-center p-4">
-              <p className="text-white text-xs text-center">{error}</p>
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-5 bg-black/70">
+              <p className="text-white text-xs text-center leading-relaxed">{error}</p>
+              <button
+                onClick={handleRetry}
+                disabled={retrying}
+                className="flex items-center gap-2 bg-white/20 hover:bg-white/30 text-white text-xs px-4 py-2 rounded-xl transition-colors disabled:opacity-50"
+              >
+                <RefreshCw size={13} className={retrying ? 'animate-spin' : ''} />
+                {retrying ? 'Mencoba...' : 'Coba Lagi'}
+              </button>
             </div>
           )}
         </div>
