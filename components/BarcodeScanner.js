@@ -147,11 +147,16 @@ export default function BarcodeScanner({ onDetected, onClose }) {
 
         setDevices(cams)
 
-        const backCamera = cams.find(d => /back|rear|environment/i.test(d.label))
-        const physicalCamera = cams.find(d =>
+        const realCams = cams.filter(d =>
+          !/virtual|bytecast|obs|snap|droid|ivcam|epoccam/i.test(d.label)
+        )
+        const pool = realCams.length > 0 ? realCams : cams
+
+        const backCamera = pool.find(d => /back|rear|environment/i.test(d.label))
+        const physicalCamera = pool.find(d =>
           /webcam|usb|integrated|built.in|facetime|hd camera/i.test(d.label)
         )
-        const chosen = backCamera || physicalCamera || cams[0]
+        const chosen = backCamera || physicalCamera || pool[0]
         setSelectedDevice(chosen.deviceId)
         startCamera(chosen.deviceId)
       } catch (err) {
