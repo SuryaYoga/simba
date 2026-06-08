@@ -11,7 +11,7 @@ export default function SidebarWrapper() {
   const pathname = usePathname()
 
   useEffect(() => {
-    if (pathname !== '/login' && pathname !== '/register' && pathname !== '/forgot-password') {
+    if (pathname !== '/login' && pathname !== '/register' && pathname !== '/forgot-password' && pathname !== '/auth/confirm' && pathname !== '/auth/reset-password') {
       fetchData()
     }
   }, [pathname])
@@ -28,7 +28,7 @@ export default function SidebarWrapper() {
     setProfile(profileData)
   }
 
-  if (pathname === '/login' || pathname === '/register' || pathname === '/forgot-password') return null
+  if (pathname === '/login' || pathname === '/register' || pathname === '/forgot-password' || pathname === '/auth/confirm' || pathname === '/auth/reset-password') return null
   return <Sidebar lowStock={lowStock} profile={profile} />
   
 }

@@ -17,7 +17,7 @@ export async function proxy(req) {
 
   const { data: { session } } = await supabase.auth.getSession()
 
-  const publicPaths = ['/login', '/register', '/forgot-password']
+  const publicPaths = ['/login', '/register', '/forgot-password', '/auth/confirm', '/auth/reset-password']
   if (!session && !publicPaths.includes(req.nextUrl.pathname)) {
     return NextResponse.redirect(new URL('/login', req.url))
   }
