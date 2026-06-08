@@ -76,7 +76,7 @@ function Drawer({ show, onClose, title, children }) {
   return (
     <div className="fixed inset-0 z-50 flex justify-end">
       <div className="absolute inset-0 bg-black/30" onClick={onClose} />
-      <div className="relative w-full max-w-md bg-white dark:bg-gray-900 h-full flex flex-col z-10 shadow-xl">
+      <div className="relative w-full max-w-md bg-white dark:bg-gray-900 h-full flex flex-col z-[100] shadow-xl">
         <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-gray-800">
           <h2 className="font-semibold text-gray-800 dark:text-gray-100">{title}</h2>
           <button onClick={onClose} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"><X size={20} /></button>
