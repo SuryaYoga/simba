@@ -1,0 +1,62 @@
+[
+  {
+    "q": "Bagaimana cara menambah produk?",
+    "a": "Buka menu Produk → klik tombol \"Tambah Produk\" → isi data seperti nama, kategori, harga, dan stok → klik \"Simpan\"."
+  },
+  {
+    "q": "Kenapa stok tidak bertambah setelah input barang masuk?",
+    "a": "Pastikan kamu memilih produk yang benar saat input barang masuk. Cek juga apakah tanggal sudah sesuai. Jika masalah berlanjut, coba refresh halaman."
+  },
+  {
+    "q": "Bagaimana cara export laporan ke PDF?",
+    "a": "Buka halaman Laporan → pilih rentang tanggal → klik tombol \"Export PDF\" di pojok kanan atas."
+  },
+  {
+    "q": "Apa fungsi minimum stok?",
+    "a": "Minimum stok adalah batas bawah stok yang kamu tentukan. Jika stok mencapai angka ini, sistem akan menampilkan notifikasi peringatan."
+  },
+  {
+    "q": "Kenapa data tidak muncul di dashboard?",
+    "a": "Dashboard menampilkan data berdasarkan periode yang dipilih. Pastikan filter sudah sesuai."
+  },
+  {
+    "q": "Bagaimana cara mengedit atau menghapus produk?",
+    "a": "Buka halaman Produk → temukan produk → klik ikon pensil untuk edit atau ikon hapus untuk menghapus."
+  },
+  {
+    "q": "Bagaimana cara scan barcode produk?",
+    "a": "Klik tombol \"Scan\" di halaman Produk, Barang Masuk, atau Barang Keluar → arahkan kamera ke barcode produk → sistem otomatis mengisi data."
+  },
+  {
+    "q": "Kenapa muncul error \"Produk dengan nama ini sudah ada\"?",
+    "a": "Nama produk dan barcode/SKU harus unik. Gunakan nama atau SKU yang berbeda, atau cek produk yang sudah ada di halaman Produk."
+  },
+  {
+    "q": "Bagaimana cara ganti foto profil?",
+    "a": "Buka menu Profil & Akun → klik \"Edit profil\" → klik ikon kamera di foto → pilih gambar dari perangkat (maks 2MB) → simpan."
+  },
+  {
+    "q": "Apa bedanya barang masuk dan barang keluar?",
+    "a": "Barang masuk mencatat penambahan stok seperti restock dari supplier. Barang keluar mencatat pengurangan stok seperti penjualan, kerusakan, atau retur."
+  },
+  {
+    "q": "Bagaimana cara reset password jika lupa?",
+    "a": "Buka Profil & Akun → Keamanan Akun → Ganti Password → klik \"Lupa password?\" — link reset akan dikirim ke email terdaftar."
+  },
+  {
+    "q": "Kenapa estimasi keuntungan di laporan minus?",
+    "a": "Estimasi keuntungan dihitung dari total nilai barang keluar dikurangi total harga beli barang masuk pada periode yang dipilih. Minus berarti modal lebih besar dari pendapatan di periode tersebut."
+  },
+  {
+    "q": "Bisa tidak satu barcode dipakai untuk dua produk?",
+    "a": "Tidak bisa. Setiap barcode/SKU harus unik untuk setiap produk agar sistem dapat mengidentifikasi produk dengan benar."
+  },
+  {
+    "q": "Bagaimana cara mengubah satuan default produk?",
+    "a": "Buka Pengaturan → bagian Preferensi → ubah Satuan Default. Satuan ini akan otomatis terisi saat menambah produk baru."
+  },
+  {
+    "q": "Kenapa notifikasi stok menipis tidak muncul?",
+    "a": "Pastikan notifikasi \"Stok Menipis\" sudah diaktifkan di Pengaturan → Notifikasi. Juga pastikan minimum stok produk sudah diisi dengan benar."
+  }
+]
