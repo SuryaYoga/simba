@@ -1,11 +1,14 @@
 'use client'
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, useCallback } from 'react'
 import { createPortal } from 'react-dom'
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
 import { X, Camera, RefreshCw } from 'lucide-react'
 
 export default function BarcodeScanner({ onDetected, onClose }) {
   const videoRef = useRef(null)
+  const streamRef = useRef(null)
+  const animFrameRef = useRef(null)
+  const canvasRef = useRef(null)
   const readerRef = useRef(null)
   const onDetectedRef = useRef(onDetected)
   const onCloseRef = useRef(onClose)
@@ -19,57 +22,104 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   useEffect(() => { onDetectedRef.current = onDetected }, [onDetected])
   useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
-  function createReader() {
-    const hints = new Map()
-    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-      BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
-      BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE,
-      BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-      BarcodeFormat.CODE_39, BarcodeFormat.CODE_93,
-      BarcodeFormat.ITF, BarcodeFormat.CODABAR,
-    ])
-    hints.set(DecodeHintType.TRY_HARDER, true)
-    hints.set(DecodeHintType.ASSUME_GS1, true)
-    return new BrowserMultiFormatReader(hints, 200) // scan interval 200ms (default 500ms)
+  function getReader() {
+    if (!readerRef.current) {
+      const hints = new Map()
+      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+        BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
+        BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE,
+        BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
+        BarcodeFormat.CODE_39, BarcodeFormat.CODE_93,
+        BarcodeFormat.ITF, BarcodeFormat.CODABAR,
+      ])
+      hints.set(DecodeHintType.TRY_HARDER, true)
+      readerRef.current = new BrowserMultiFormatReader(hints)
+    }
+    return readerRef.current
   }
 
-  function stopReader() {
-    try { readerRef.current?.reset() } catch {}
-    readerRef.current = null
+  function stopEverything() {
+    // Stop scan loop
+    if (animFrameRef.current) {
+      cancelAnimationFrame(animFrameRef.current)
+      animFrameRef.current = null
+    }
+    // Stop stream tracks
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach(t => t.stop())
+      streamRef.current = null
+    }
+    // Detach video
+    if (videoRef.current) {
+      videoRef.current.srcObject = null
+    }
+  }
+
+  // Scan loop: decode dari canvas setiap frame
+  function startScanLoop() {
+    const video = videoRef.current
+    const canvas = canvasRef.current
+    if (!video || !canvas) return
+
+    const ctx = canvas.getContext('2d', { willReadFrequently: true })
+    const reader = getReader()
+
+    function tick() {
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.width = video.videoWidth
+        canvas.height = video.videoHeight
+        ctx.drawImage(video, 0, 0)
+
+        try {
+          const result = reader.decodeFromCanvas(canvas)
+          if (result) {
+            onDetectedRef.current(result.getText())
+            stopEverything()
+            onCloseRef.current()
+            return
+          }
+        } catch (e) {
+          // NotFoundException = normal, lanjut scan
+        }
+      }
+      animFrameRef.current = requestAnimationFrame(tick)
+    }
+
+    animFrameRef.current = requestAnimationFrame(tick)
   }
 
   async function startCamera(deviceId) {
-    stopReader()
+    stopEverything()
     setError(null)
 
     try {
-      const reader = createReader()
-      readerRef.current = reader
+      const constraints = {
+        video: deviceId
+          ? { deviceId: { exact: deviceId } }
+          : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      }
 
-      // Pakai decodeFromVideoDevice — biar reader yang handle stream-nya sendiri
-      // Ini lebih stabil dan ga konflik sama srcObject manual
-      await reader.decodeFromVideoDevice(
-        deviceId || undefined,
-        videoRef.current,
-        (result, err) => {
-          if (result) {
-            onDetectedRef.current(result.getText())
-            stopReader()
-            onCloseRef.current()
-          }
-          if (err && err?.name !== 'NotFoundException') {
-            console.error('Scan error:', err)
-          }
-        }
-      )
+      const stream = await navigator.mediaDevices.getUserMedia(constraints)
+      streamRef.current = stream
+
+      const video = videoRef.current
+      if (!video) { stream.getTracks().forEach(t => t.stop()); return }
+
+      video.srcObject = stream
+      video.onloadedmetadata = () => {
+        video.play()
+          .then(() => startScanLoop())
+          .catch(err => setError('Gagal play video: ' + err.message))
+      }
     } catch (err) {
       if (err?.name === 'NotReadableError') {
-        setError('Kamera sedang dipakai aplikasi lain (OBS, Zoom, tab lain). Tutup dulu lalu coba lagi.')
+        setError('Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu klik Coba Lagi.')
       } else if (err?.name === 'NotAllowedError') {
-        setError('Izin kamera ditolak. Aktifkan kamera di pengaturan browser.')
+        setError('Izin kamera ditolak. Klik ikon kunci di address bar dan izinkan kamera.')
       } else if (err?.name === 'NotFoundError') {
         setError('Tidak ada kamera ditemukan.')
       } else if (err?.name === 'OverconstrainedError') {
+        // deviceId exact gagal, fallback tanpa constraint
         startCamera(null)
       } else {
         setError('Gagal akses kamera: ' + (err?.message || err))
@@ -78,49 +128,39 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   }
 
   useEffect(() => {
-    let isMounted = true
+    let cancelled = false
 
-    async function initDevices() {
+    async function init() {
       try {
-        // Minta permission dulu buat dapetin label
-        try {
-          const temp = await navigator.mediaDevices.getUserMedia({ video: true })
-          temp.getTracks().forEach(t => t.stop())
-        } catch {}
+        // Minta permission dulu
+        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
+        tempStream.getTracks().forEach(t => t.stop())
+
+        if (cancelled) return
 
         const all = await navigator.mediaDevices.enumerateDevices()
         const cams = all.filter(d => d.kind === 'videoinput')
 
-        if (!isMounted) return
+        if (cancelled) return
 
-        if (cams.length === 0) {
-          setError('Tidak ada kamera ditemukan')
-          return
-        }
+        if (cams.length === 0) { setError('Tidak ada kamera ditemukan'); return }
 
         setDevices(cams)
 
-        // Prioritas: kamera belakang > kamera fisik > kamera pertama
-        // Tidak exclude virtual camera — biarkan user pilih sendiri via dropdown
         const backCamera = cams.find(d => /back|rear|environment/i.test(d.label))
         const physicalCamera = cams.find(d =>
           /webcam|usb|integrated|built.in|facetime|hd camera/i.test(d.label)
         )
         const chosen = backCamera || physicalCamera || cams[0]
-
         setSelectedDevice(chosen.deviceId)
         startCamera(chosen.deviceId)
       } catch (err) {
-        if (isMounted) setError('Gagal akses kamera: ' + (err?.message || err))
+        if (!cancelled) setError('Gagal akses kamera: ' + (err?.message || err))
       }
     }
 
-    initDevices()
-
-    return () => {
-      isMounted = false
-      stopReader()
-    }
+    init()
+    return () => { cancelled = true; stopEverything() }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleChangeDevice(e) {
@@ -136,7 +176,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   }
 
   function handleClose() {
-    stopReader()
+    stopEverything()
     onClose()
   }
 
@@ -157,7 +197,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           </button>
         </div>
 
-        {/* Camera dropdown — selalu tampil kalau ada >1 kamera */}
+        {/* Camera dropdown */}
         {devices.length > 1 && (
           <div className="px-5 pt-4 pb-0">
             <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
@@ -179,7 +219,8 @@ export default function BarcodeScanner({ onDetected, onClose }) {
 
         {/* Video */}
         <div className="bg-black relative min-h-[220px] flex items-center justify-center mt-3">
-          <video ref={videoRef} className="w-full" playsInline muted autoPlay />
+          <video ref={videoRef} className="w-full" playsInline muted />
+          <canvas ref={canvasRef} className="hidden" />
           {error && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-5 bg-black/70">
               <p className="text-white text-xs text-center leading-relaxed">{error}</p>
