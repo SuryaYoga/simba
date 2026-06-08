@@ -1,43 +1,70 @@
 'use client'
 import { useEffect, useRef } from 'react'
-import { BrowserMultiFormatReader } from '@zxing/library'
+import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
 import { X } from 'lucide-react'
 
 export default function BarcodeScanner({ onDetected, onClose }) {
   const videoRef = useRef(null)
   const readerRef = useRef(null)
+  const onDetectedRef = useRef(onDetected)
+  const onCloseRef = useRef(onClose)
+
+  useEffect(() => { onDetectedRef.current = onDetected }, [onDetected])
+  useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
   useEffect(() => {
-    const reader = new BrowserMultiFormatReader()
+    const hints = new Map()
+    hints.set(DecodeHintType.POSSIBLE_FORMATS, [
+      BarcodeFormat.EAN_13,
+      BarcodeFormat.EAN_8,
+      BarcodeFormat.CODE_128,
+      BarcodeFormat.QR_CODE,
+      BarcodeFormat.UPC_A,
+      BarcodeFormat.CODE_39,
+    ])
+    hints.set(DecodeHintType.TRY_HARDER, true)
+
+    const reader = new BrowserMultiFormatReader(hints)
     readerRef.current = reader
 
-    reader.listVideoInputDevices().then(devices => {
-      if (!devices || devices.length === 0) {
-        alert('Tidak ada kamera ditemukan')
-        return
-      }
-      const deviceId = devices[devices.length - 1].deviceId
-      reader.decodeFromVideoDevice(deviceId, videoRef.current, (result, err) => {
-        if (result) {
-          onDetected(result.getText())
-          reader.reset()
-          onClose()
+    reader.listVideoInputDevices()
+      .then(devices => {
+        if (!devices || devices.length === 0) {
+          alert('Tidak ada kamera ditemukan')
+          return
+        }
+        const backCamera = devices.find(d => /back|rear|environment/i.test(d.label))
+        const deviceId = (backCamera || devices[devices.length - 1]).deviceId
+
+        return reader.decodeFromVideoDevice(deviceId, videoRef.current, (result, err) => {
+          if (result) {
+            onDetectedRef.current(result.getText())
+            reader.reset()
+            onCloseRef.current()
+          }
+          if (err && err?.name !== 'NotFoundException') {
+            console.error('Scan error:', err)
+          }
+        })
+      })
+      .catch(err => {
+        if (err?.name === 'NotAllowedError') {
+          alert('Izin kamera ditolak. Aktifkan kamera di pengaturan browser.')
+        } else if (err?.name === 'NotFoundError') {
+          alert('Tidak ada kamera ditemukan di perangkat ini.')
+        } else {
+          alert('Gagal akses kamera: ' + (err?.message || err))
         }
       })
-    }).catch(err => {
-      alert('Gagal akses kamera: ' + err)
-    })
 
-    return () => { readerRef.current?.reset() }
-  }, [])
+    return () => {
+      try { readerRef.current?.reset() } catch {}
+    }
+  }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
   function handleClose() {
-    try {
-      readerRef.current?.reset()
-      onClose()
-    } catch {
-      onClose()
-    }
+    try { readerRef.current?.reset() } catch {}
+    onClose()
   }
 
   return (

@@ -1,7 +1,8 @@
 'use client'
 import { useEffect, useState, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
-import BarcodeScanner from '@/components/BarcodeScanner'
+import dynamic from 'next/dynamic'
+const BarcodeScanner = dynamic(() => import('@/components/BarcodeScanner'), { ssr: false })
 import { addNotification } from '@/lib/notifications'
 import { Search, ScanBarcode, Pencil, Trash2, Plus, Package, ShieldCheck, AlertTriangle, XCircle, X, ChevronDown, Check } from 'lucide-react'
 
