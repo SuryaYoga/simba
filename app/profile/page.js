@@ -183,7 +183,9 @@ export default function ProfilePage() {
   }
 
   async function handleResetPassword() {
-    const { error } = await supabase.auth.resetPasswordForEmail(email)
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/auth/confirm`,
+    })
     if (error) setToast({ type: 'error', text: error.message })
     else { setToast({ type: 'success', text: 'Link reset password dikirim ke email' }); setModal(null) }
   }
