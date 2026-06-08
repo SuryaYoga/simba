@@ -147,7 +147,13 @@ export default function ProfilePage() {
 
   async function handleSendOtp() {
     setOtpLoading(true)
-    const { error } = await supabase.auth.signInWithOtp({ email, options: { shouldCreateUser: false } })
+    const { error } = await supabase.auth.signInWithOtp({
+      email,
+      options: {
+        shouldCreateUser: false,
+        emailRedirectTo: undefined,
+      }
+    })
     if (error) setToast({ type: 'error', text: error.message })
     else { setEmailStep(2); setToast({ type: 'success', text: 'Kode OTP dikirim ke email kamu' }) }
     setOtpLoading(false)
