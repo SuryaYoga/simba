@@ -30,6 +30,8 @@ export async function GET(request) {
     if (!error) {
       return NextResponse.redirect(`${origin}/auth/reset-password`)
     }
+    console.log('verifyOtp error:', error)
+    return NextResponse.redirect(`${origin}/auth/login?error=${error?.message}`)
   }
 
   return NextResponse.redirect(`${origin}/auth/login?error=invalid_link`)
