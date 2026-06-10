@@ -1,15 +1,13 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode'
 import { X, Camera, RefreshCw, Loader2 } from 'lucide-react'
 
+const SCANNER_ID = 'html5qr-scanner-region'
+
 export default function BarcodeScanner({ onDetected, onClose }) {
-  const videoRef = useRef(null)
-  const streamRef = useRef(null)
-  const animFrameRef = useRef(null)
-  const canvasRef = useRef(null)
-  const readerRef = useRef(null)
+  const scannerRef = useRef(null)
   const onDetectedRef = useRef(onDetected)
   const onCloseRef = useRef(onClose)
   const [devices, setDevices] = useState([])
@@ -23,107 +21,70 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   useEffect(() => { onDetectedRef.current = onDetected }, [onDetected])
   useEffect(() => { onCloseRef.current = onClose }, [onClose])
 
-  function getReader() {
-    if (!readerRef.current) {
-      const hints = new Map()
-      hints.set(DecodeHintType.POSSIBLE_FORMATS, [
-        BarcodeFormat.EAN_13, BarcodeFormat.EAN_8,
-        BarcodeFormat.CODE_128, BarcodeFormat.QR_CODE,
-        BarcodeFormat.UPC_A, BarcodeFormat.UPC_E,
-        BarcodeFormat.CODE_39, BarcodeFormat.CODE_93,
-        BarcodeFormat.ITF, BarcodeFormat.CODABAR,
-      ])
-      hints.set(DecodeHintType.TRY_HARDER, true)
-      readerRef.current = new BrowserMultiFormatReader(hints)
-    }
-    return readerRef.current
-  }
-
-  function stopEverything() {
-    if (animFrameRef.current) {
-      cancelAnimationFrame(animFrameRef.current)
-      animFrameRef.current = null
-    }
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach(t => t.stop())
-      streamRef.current = null
-    }
-    if (videoRef.current) {
-      videoRef.current.srcObject = null
+  async function stopScanner() {
+    if (scannerRef.current) {
+      try {
+        const state = scannerRef.current.getState()
+        if (state === 2 || state === 3) {
+          await scannerRef.current.stop()
+        }
+        scannerRef.current.clear()
+      } catch {}
+      scannerRef.current = null
     }
   }
 
-  function startScanLoop() {
-    const video = videoRef.current
-    const canvas = canvasRef.current
-    if (!video || !canvas) return
-
-    const ctx = canvas.getContext('2d', { willReadFrequently: true })
-    const reader = getReader()
-
-    function tick() {
-      if (video.readyState === video.HAVE_ENOUGH_DATA) {
-        canvas.width = video.videoWidth
-        canvas.height = video.videoHeight
-        ctx.drawImage(video, 0, 0)
-        try {
-          const result = reader.decodeFromCanvas(canvas)
-          if (result) {
-            onDetectedRef.current(result.getText())
-            stopEverything()
-            onCloseRef.current()
-            return
-          }
-        } catch (e) { /* NotFoundException = normal */ }
-      }
-      animFrameRef.current = requestAnimationFrame(tick)
-    }
-
-    animFrameRef.current = requestAnimationFrame(tick)
-  }
-
-  async function startCamera(deviceId) {
-    stopEverything()
+  async function startScanner(deviceId) {
+    await stopScanner()
     setError(null)
     setLoading(true)
 
     try {
-      const constraints = {
-        video: deviceId
-          ? { deviceId: { exact: deviceId } }
-          : { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }
+      const scanner = new Html5Qrcode(SCANNER_ID, {
+        formatsToSupport: [
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.EAN_8,
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.UPC_E,
+          Html5QrcodeSupportedFormats.ITF,
+          Html5QrcodeSupportedFormats.CODABAR,
+        ],
+        verbose: false,
+      })
+      scannerRef.current = scanner
+
+      const config = {
+        fps: 15,
+        qrbox: { width: 280, height: 160 },
+        aspectRatio: 1.5,
+        disableFlip: false,
       }
 
-      const stream = await navigator.mediaDevices.getUserMedia(constraints)
-      streamRef.current = stream
+      await scanner.start(
+        deviceId ? { deviceId: { exact: deviceId } } : { facingMode: 'environment' },
+        config,
+        (decodedText) => {
+          onDetectedRef.current(decodedText)
+          stopScanner()
+          onCloseRef.current()
+        },
+        () => {}
+      )
 
-      const video = videoRef.current
-      if (!video) { stream.getTracks().forEach(t => t.stop()); return }
-
-      video.srcObject = stream
-      video.onloadedmetadata = () => {
-        video.play()
-          .then(() => {
-            setLoading(false)
-            startScanLoop()
-          })
-          .catch(err => {
-            setLoading(false)
-            setError('Gagal play video: ' + err.message)
-          })
-      }
+      setLoading(false)
     } catch (err) {
       setLoading(false)
-      if (err?.name === 'NotReadableError') {
-        setError('Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu klik Coba Lagi.')
-      } else if (err?.name === 'NotAllowedError') {
+      if (err?.name === 'NotAllowedError' || String(err).includes('Permission')) {
         setError('Izin kamera ditolak. Klik ikon kunci di address bar → Site settings → Camera → Allow.')
+      } else if (err?.name === 'NotReadableError' || String(err).includes('not readable')) {
+        setError('Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu klik Coba Lagi.')
       } else if (err?.name === 'NotFoundError') {
         setError('Tidak ada kamera ditemukan.')
-      } else if (err?.name === 'OverconstrainedError') {
-        startCamera(null)
       } else {
-        setError('Gagal akses kamera: ' + (err?.message || err))
+        setError('Gagal akses kamera: ' + (err?.message || String(err)))
       }
     }
   }
@@ -133,70 +94,69 @@ export default function BarcodeScanner({ onDetected, onClose }) {
 
     async function init() {
       try {
-        // Minta permission dulu
-        const tempStream = await navigator.mediaDevices.getUserMedia({ video: true })
-        tempStream.getTracks().forEach(t => t.stop())
+        const camDevices = await Html5Qrcode.getCameras()
 
         if (cancelled) return
 
-        const all = await navigator.mediaDevices.enumerateDevices()
-        const cams = all.filter(d => d.kind === 'videoinput')
+        if (!camDevices || camDevices.length === 0) {
+          setLoading(false)
+          setError('Tidak ada kamera ditemukan.')
+          return
+        }
 
-        if (cancelled) return
-        if (cams.length === 0) { setLoading(false); setError('Tidak ada kamera ditemukan'); return }
+        setDevices(camDevices)
 
-        setDevices(cams)
-
-        // Filter virtual camera, fallback ke semua kalau ga ada yang fisik
-        const realCams = cams.filter(d =>
+        // Filter virtual camera untuk auto-select
+        const realCams = camDevices.filter(d =>
           !/virtual|bytecast|obs|snap|droid|ivcam|epoccam/i.test(d.label)
         )
-        const pool = realCams.length > 0 ? realCams : cams
+        const pool = realCams.length > 0 ? realCams : camDevices
 
         const backCamera = pool.find(d => /back|rear|environment/i.test(d.label))
         const physicalCamera = pool.find(d =>
           /webcam|usb|integrated|built.in|facetime|hd camera/i.test(d.label)
         )
         const chosen = backCamera || physicalCamera || pool[0]
-        setSelectedDevice(chosen.deviceId)
-        startCamera(chosen.deviceId)
+
+        setSelectedDevice(chosen.id)
+        startScanner(chosen.id)
       } catch (err) {
         if (!cancelled) {
           setLoading(false)
-          if (err?.name === 'NotAllowedError') {
-            setError('Izin kamera ditolak. Klik ikon kunci di address bar → Site settings → Camera → Allow.')
-          } else {
-            setError('Gagal akses kamera: ' + (err?.message || err))
-          }
+          setError('Gagal akses kamera: ' + (err?.message || String(err)))
         }
       }
     }
 
     init()
-    return () => { cancelled = true; stopEverything() }
+    return () => {
+      cancelled = true
+      stopScanner()
+    }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  function handleChangeDevice(e) {
+  async function handleChangeDevice(e) {
     const deviceId = e.target.value
     setSelectedDevice(deviceId)
-    startCamera(deviceId)
+    await startScanner(deviceId)
   }
 
   async function handleRetry() {
     setRetrying(true)
-    await startCamera(selectedDevice)
+    await startScanner(selectedDevice)
     setRetrying(false)
   }
 
   function handleClose() {
-    stopEverything()
+    stopScanner()
     onClose()
   }
 
   if (!mounted) return null
 
   return createPortal(
-    <div style={{ zIndex: 9999 }} className="fixed inset-0 bg-black/80 flex items-center justify-center p-4">
+    // z-index 99999 — lebih tinggi dari Drawer (z-[100]) dan semua overlay lain
+    <div style={{ zIndex: 99999 }} className="fixed inset-0 bg-black/80 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
 
         {/* Header */}
@@ -210,8 +170,8 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           </button>
         </div>
 
-        {/* Camera dropdown — selalu tampil kalau ada kamera */}
-        {devices.length > 0 && (
+        {/* Camera dropdown */}
+        {devices.length > 1 && (
           <div className="px-5 pt-4 pb-0">
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Pilih Kamera</label>
             <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5">
@@ -222,8 +182,8 @@ export default function BarcodeScanner({ onDetected, onClose }) {
                 className="w-full text-sm text-gray-800 bg-transparent outline-none cursor-pointer"
               >
                 {devices.map(d => (
-                  <option key={d.deviceId} value={d.deviceId}>
-                    {d.label || `Kamera ${d.deviceId.slice(0, 8)}...`}
+                  <option key={d.id} value={d.id}>
+                    {d.label || `Kamera ${d.id.slice(0, 8)}...`}
                   </option>
                 ))}
               </select>
@@ -231,10 +191,9 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           </div>
         )}
 
-        {/* Video */}
-        <div className="bg-black relative min-h-[240px] flex items-center justify-center mt-3 mx-0">
-          <video ref={videoRef} className="w-full block" playsInline muted />
-          <canvas ref={canvasRef} className="hidden" />
+        {/* Scanner region */}
+        <div className="relative mt-3 bg-black min-h-[240px]">
+          <div id={SCANNER_ID} className="w-full" />
 
           {/* Loading overlay */}
           {loading && !error && (

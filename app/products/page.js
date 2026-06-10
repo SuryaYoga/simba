@@ -207,11 +207,9 @@ export default function ProductsPage() {
   function getStoragePath(publicUrl) {
     try {
       const url = new URL(publicUrl)
-      // pathname masih encoded, ambil raw lalu strip prefix
       const marker = '/object/public/product-images/'
       const idx = url.pathname.indexOf(marker)
       if (idx === -1) return null
-      // jangan decode — Supabase remove() butuh path as-is (encoded)
       return decodeURIComponent(url.pathname.slice(idx + marker.length))
     } catch {
       return null
@@ -219,15 +217,12 @@ export default function ProductsPage() {
   }
 
   async function deleteImageFromStorage(publicUrl) {
-  if (!publicUrl) return
-  console.log('🗑 deleteImageFromStorage called with:', publicUrl)
-  const path = getStoragePath(publicUrl)
-  console.log('🗑 extracted path:', path)
-  if (!path) return
-  const { error } = await supabase.storage.from('product-images').remove([path])
-  if (error) console.error('🗑 remove error:', error)
-  else console.log('🗑 remove success')
-}
+    if (!publicUrl) return
+    const path = getStoragePath(publicUrl)
+    if (!path) return
+    const { error } = await supabase.storage.from('product-images').remove([path])
+    if (error) console.error('remove error:', error)
+  }
 
   async function uploadImage(oldImageUrl = null) {
     if (!imageFile) return null
@@ -268,11 +263,7 @@ export default function ProductsPage() {
 
     setLoading(true)
 
-    let nameQuery = supabase
-      .from('products')
-      .select('id')
-      .ilike('name', form.name.trim())
-      .limit(1)
+    let nameQuery = supabase.from('products').select('id').ilike('name', form.name.trim()).limit(1)
     if (editId) nameQuery = nameQuery.neq('id', editId)
     const { data: nameData, error: nameError } = await nameQuery
     if (nameError) {
@@ -287,11 +278,7 @@ export default function ProductsPage() {
       return
     }
 
-    let barcodeQuery = supabase
-      .from('products')
-      .select('id')
-      .eq('barcode', form.barcode.trim())
-      .limit(1)
+    let barcodeQuery = supabase.from('products').select('id').eq('barcode', form.barcode.trim()).limit(1)
     if (editId) barcodeQuery = barcodeQuery.neq('id', editId)
     const { data: barcodeData, error: barcodeError } = await barcodeQuery
     if (barcodeError) {
@@ -449,22 +436,8 @@ export default function ProductsPage() {
     <div className="min-h-screen bg-gray-100 dark:bg-gray-950">
       {toast && <Toast msg={toast} onClose={() => setToast(null)} />}
       {deleteTarget && <DeleteModal product={deleteTarget} onConfirm={handleDelete} onCancel={() => setDeleteTarget(null)} />}
-      {showScanner && (
-        <BarcodeScanner
-          onDetected={code => {
-            if (scanContext === 'search') {
-              setSearch(code)
-              setToast({ type: 'success', text: `Barcode: ${code}` })
-            } else {
-              setField('barcode', code)
-              setToast({ type: 'success', text: `Barcode terdeteksi: ${code}` })
-            }
-            setShowScanner(false)
-          }}
-          onClose={() => setShowScanner(false)}
-        />
-      )}
 
+      {/* Drawer form */}
       <Drawer show={showForm} onClose={handleCancel} title={editId ? 'Edit Produk' : 'Tambah Produk'}>
         <form onSubmit={handleSubmit} onKeyDown={e => { if (e.key === 'Enter') e.preventDefault() }} noValidate className="flex flex-col gap-4">
 
@@ -628,6 +601,23 @@ export default function ProductsPage() {
           </div>
         </form>
       </Drawer>
+
+      {/* Scanner — di luar Drawer, render paling akhir supaya selalu di atas */}
+      {showScanner && (
+        <BarcodeScanner
+          onDetected={code => {
+            if (scanContext === 'search') {
+              setSearch(code)
+              setToast({ type: 'success', text: `Barcode: ${code}` })
+            } else {
+              setField('barcode', code)
+              setToast({ type: 'success', text: `Barcode terdeteksi: ${code}` })
+            }
+            setShowScanner(false)
+          }}
+          onClose={() => setShowScanner(false)}
+        />
+      )}
 
       <div className="px-4 md:px-6 py-6 max-w-8xl mx-auto">
 
