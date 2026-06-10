@@ -1,8 +1,8 @@
 'use client'
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { BrowserMultiFormatReader, DecodeHintType, BarcodeFormat } from '@zxing/library'
-import { X, Camera, RefreshCw } from 'lucide-react'
+import { X, Camera, RefreshCw, Loader2 } from 'lucide-react'
 
 export default function BarcodeScanner({ onDetected, onClose }) {
   const videoRef = useRef(null)
@@ -15,6 +15,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   const [devices, setDevices] = useState([])
   const [selectedDevice, setSelectedDevice] = useState(null)
   const [error, setError] = useState(null)
+  const [loading, setLoading] = useState(true)
   const [retrying, setRetrying] = useState(false)
   const [mounted, setMounted] = useState(false)
 
@@ -39,23 +40,19 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   }
 
   function stopEverything() {
-    // Stop scan loop
     if (animFrameRef.current) {
       cancelAnimationFrame(animFrameRef.current)
       animFrameRef.current = null
     }
-    // Stop stream tracks
     if (streamRef.current) {
       streamRef.current.getTracks().forEach(t => t.stop())
       streamRef.current = null
     }
-    // Detach video
     if (videoRef.current) {
       videoRef.current.srcObject = null
     }
   }
 
-  // Scan loop: decode dari canvas setiap frame
   function startScanLoop() {
     const video = videoRef.current
     const canvas = canvasRef.current
@@ -69,7 +66,6 @@ export default function BarcodeScanner({ onDetected, onClose }) {
         canvas.width = video.videoWidth
         canvas.height = video.videoHeight
         ctx.drawImage(video, 0, 0)
-
         try {
           const result = reader.decodeFromCanvas(canvas)
           if (result) {
@@ -78,9 +74,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
             onCloseRef.current()
             return
           }
-        } catch (e) {
-          // NotFoundException = normal, lanjut scan
-        }
+        } catch (e) { /* NotFoundException = normal */ }
       }
       animFrameRef.current = requestAnimationFrame(tick)
     }
@@ -91,6 +85,7 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   async function startCamera(deviceId) {
     stopEverything()
     setError(null)
+    setLoading(true)
 
     try {
       const constraints = {
@@ -108,18 +103,24 @@ export default function BarcodeScanner({ onDetected, onClose }) {
       video.srcObject = stream
       video.onloadedmetadata = () => {
         video.play()
-          .then(() => startScanLoop())
-          .catch(err => setError('Gagal play video: ' + err.message))
+          .then(() => {
+            setLoading(false)
+            startScanLoop()
+          })
+          .catch(err => {
+            setLoading(false)
+            setError('Gagal play video: ' + err.message)
+          })
       }
     } catch (err) {
+      setLoading(false)
       if (err?.name === 'NotReadableError') {
         setError('Kamera sedang dipakai aplikasi lain. Tutup aplikasi lain lalu klik Coba Lagi.')
       } else if (err?.name === 'NotAllowedError') {
-        setError('Izin kamera ditolak. Klik ikon kunci di address bar dan izinkan kamera.')
+        setError('Izin kamera ditolak. Klik ikon kunci di address bar → Site settings → Camera → Allow.')
       } else if (err?.name === 'NotFoundError') {
         setError('Tidak ada kamera ditemukan.')
       } else if (err?.name === 'OverconstrainedError') {
-        // deviceId exact gagal, fallback tanpa constraint
         startCamera(null)
       } else {
         setError('Gagal akses kamera: ' + (err?.message || err))
@@ -142,11 +143,11 @@ export default function BarcodeScanner({ onDetected, onClose }) {
         const cams = all.filter(d => d.kind === 'videoinput')
 
         if (cancelled) return
-
-        if (cams.length === 0) { setError('Tidak ada kamera ditemukan'); return }
+        if (cams.length === 0) { setLoading(false); setError('Tidak ada kamera ditemukan'); return }
 
         setDevices(cams)
 
+        // Filter virtual camera, fallback ke semua kalau ga ada yang fisik
         const realCams = cams.filter(d =>
           !/virtual|bytecast|obs|snap|droid|ivcam|epoccam/i.test(d.label)
         )
@@ -160,7 +161,14 @@ export default function BarcodeScanner({ onDetected, onClose }) {
         setSelectedDevice(chosen.deviceId)
         startCamera(chosen.deviceId)
       } catch (err) {
-        if (!cancelled) setError('Gagal akses kamera: ' + (err?.message || err))
+        if (!cancelled) {
+          setLoading(false)
+          if (err?.name === 'NotAllowedError') {
+            setError('Izin kamera ditolak. Klik ikon kunci di address bar → Site settings → Camera → Allow.')
+          } else {
+            setError('Gagal akses kamera: ' + (err?.message || err))
+          }
+        }
       }
     }
 
@@ -192,25 +200,26 @@ export default function BarcodeScanner({ onDetected, onClose }) {
       <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
           <div>
             <p className="font-semibold text-gray-800">Scan Barcode</p>
             <p className="text-xs text-gray-400 mt-0.5">Arahkan kamera ke barcode produk</p>
           </div>
-          <button onClick={handleClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500">
+          <button onClick={handleClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors">
             <X size={18} />
           </button>
         </div>
 
-        {/* Camera dropdown */}
-        {devices.length > 1 && (
+        {/* Camera dropdown — selalu tampil kalau ada kamera */}
+        {devices.length > 0 && (
           <div className="px-5 pt-4 pb-0">
-            <div className="flex items-center gap-2 bg-gray-50 border border-gray-200 rounded-xl px-3 py-2">
-              <Camera size={14} className="text-gray-400 shrink-0" />
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">Pilih Kamera</label>
+            <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5">
+              <Camera size={14} className="text-gray-500 shrink-0" />
               <select
                 value={selectedDevice || ''}
                 onChange={handleChangeDevice}
-                className="w-full text-xs text-gray-700 bg-transparent outline-none"
+                className="w-full text-sm text-gray-800 bg-transparent outline-none cursor-pointer"
               >
                 {devices.map(d => (
                   <option key={d.deviceId} value={d.deviceId}>
@@ -223,11 +232,21 @@ export default function BarcodeScanner({ onDetected, onClose }) {
         )}
 
         {/* Video */}
-        <div className="bg-black relative min-h-[220px] flex items-center justify-center mt-3">
-          <video ref={videoRef} className="w-full" playsInline muted />
+        <div className="bg-black relative min-h-[240px] flex items-center justify-center mt-3 mx-0">
+          <video ref={videoRef} className="w-full block" playsInline muted />
           <canvas ref={canvasRef} className="hidden" />
+
+          {/* Loading overlay */}
+          {loading && !error && (
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black">
+              <Loader2 size={28} className="text-white animate-spin" />
+              <p className="text-white text-xs">Membuka kamera...</p>
+            </div>
+          )}
+
+          {/* Error overlay */}
           {error && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-5 bg-black/70">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-5 bg-black">
               <p className="text-white text-xs text-center leading-relaxed">{error}</p>
               <button
                 onClick={handleRetry}
