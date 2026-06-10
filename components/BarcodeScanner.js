@@ -160,15 +160,15 @@ export default function BarcodeScanner({ onDetected, onClose }) {
   return createPortal(
     // z-index 99999 — lebih tinggi dari Drawer (z-[100]) dan semua overlay lain
     <div style={{ zIndex: 99999 }} className="fixed inset-0 bg-black/80 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
+      <div className="bg-white dark:bg-gray-900 rounded-2xl w-full max-w-sm overflow-hidden shadow-2xl">
 
         {/* Header */}
-        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100">
+        <div className="flex items-center justify-between px-5 py-4 border-b border-gray-100 dark:border-gray-800">
           <div>
-            <p className="font-semibold text-gray-800">Scan Barcode</p>
+            <p className="font-semibold text-gray-800 dark:text-gray-100">Scan Barcode</p>
             <p className="text-xs text-gray-400 mt-0.5">Arahkan kamera ke barcode produk</p>
           </div>
-          <button onClick={handleClose} className="p-2 rounded-xl hover:bg-gray-100 text-gray-500 transition-colors">
+          <button onClick={handleClose} className="p-2 rounded-xl hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-500 dark:text-gray-400 transition-colors">
             <X size={18} />
           </button>
         </div>
@@ -176,13 +176,13 @@ export default function BarcodeScanner({ onDetected, onClose }) {
         {/* Camera dropdown */}
         {devices.length > 1 && (
           <div className="px-5 pt-4 pb-0">
-            <label className="block text-xs font-medium text-gray-500 mb-1.5">Pilih Kamera</label>
-            <div className="flex items-center gap-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5">
-              <Camera size={14} className="text-gray-500 dark:text-gray-300 shrink-0" />
+            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1.5">Pilih Kamera</label>
+            <div className="flex items-center gap-2 bg-gray-100 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-xl px-3 py-2.5">
+              <Camera size={14} className="text-gray-500 dark:text-gray-400 shrink-0" />
               <select
                 value={selectedDevice || ''}
                 onChange={handleChangeDevice}
-                className="w-full text-sm text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-700 outline-none cursor-pointer"
+                className="w-full text-sm text-gray-800 dark:text-gray-100 bg-gray-100 dark:bg-gray-800 outline-none cursor-pointer"
               >
                 {devices.map(d => (
                   <option key={d.id} value={d.id}>
@@ -222,8 +222,8 @@ export default function BarcodeScanner({ onDetected, onClose }) {
           )}
         </div>
 
-        <div className="px-5 py-4">
-          <p className="text-xs text-gray-400 text-center">Pastikan cahaya cukup & barcode tegak lurus</p>
+        <div className="px-5 py-4 bg-white dark:bg-gray-900">
+          <p className="text-xs text-gray-400 dark:text-gray-500 text-center">Pastikan cahaya cukup & barcode tegak lurus</p>
         </div>
 
       </div>
