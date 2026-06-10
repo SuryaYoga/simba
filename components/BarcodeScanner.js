@@ -177,12 +177,12 @@ export default function BarcodeScanner({ onDetected, onClose }) {
         {devices.length > 1 && (
           <div className="px-5 pt-4 pb-0">
             <label className="block text-xs font-medium text-gray-500 mb-1.5">Pilih Kamera</label>
-            <div className="flex items-center gap-2 bg-gray-100 border border-gray-200 rounded-xl px-3 py-2.5">
-              <Camera size={14} className="text-gray-500 shrink-0" />
+            <div className="flex items-center gap-2 bg-white dark:bg-gray-700 border border-gray-200 dark:border-gray-600 rounded-xl px-3 py-2.5">
+              <Camera size={14} className="text-gray-500 dark:text-gray-300 shrink-0" />
               <select
                 value={selectedDevice || ''}
                 onChange={handleChangeDevice}
-                className="w-full text-sm text-gray-800 bg-transparent outline-none cursor-pointer"
+                className="w-full text-sm text-gray-800 dark:text-gray-100 bg-white dark:bg-gray-700 outline-none cursor-pointer"
               >
                 {devices.map(d => (
                   <option key={d.id} value={d.id}>
