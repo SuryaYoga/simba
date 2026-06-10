@@ -57,10 +57,13 @@ export default function BarcodeScanner({ onDetected, onClose }) {
       scannerRef.current = scanner
 
       const config = {
-        fps: 15,
-        qrbox: { width: 280, height: 160 },
-        aspectRatio: 1.5,
+        fps: 20,
+        qrbox: { width: 300, height: 200 },
+        aspectRatio: 1.333,
         disableFlip: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true
+        }
       }
 
       await scanner.start(
