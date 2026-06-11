@@ -451,7 +451,7 @@ export default function ForgotPasswordPage() {
         </div>
 
         <div className="fp-footer">
-          © 2024 SIMBA - Sistem Monitoring Barang. Semua hak dilindungi.
+          © 2026 SIMBA - Sistem Monitoring Barang. Semua hak dilindungi.
         </div>
       </div>
     </>

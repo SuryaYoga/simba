@@ -663,7 +663,7 @@ export default function LoginPage() {
           </div>
 
           <div className="right-footer">
-            © 2024 SIMBA - Sistem Monitoring Barang. Semua hak dilindungi.
+            © 2026 SIMBA - Sistem Monitoring Barang. Semua hak dilindungi.
           </div>
         </div>
 
